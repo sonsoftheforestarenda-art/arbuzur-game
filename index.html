@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Арбузур: Великий Рост</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #c7ffb1 0%, #74d66d 45%, #2c8c45 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: system-ui, 'Segoe UI', sans-serif;
+      touch-action: manipulation;
+    }
+    .game-container {
+      width: 100%;
+      max-width: 500px;
+      background: rgba(0,0,0,0.08);
+      border-radius: 64px;
+      padding: 20px;
+      text-align: center;
+    }
+    .stats {
+      background: rgba(255,255,240,0.92);
+      border-radius: 36px;
+      padding: 16px;
+      margin-bottom: 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      backdrop-filter: blur(4px);
+    }
+    .stat-card {
+      background: white;
+      border-radius: 24px;
+      padding: 8px 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .stat-label {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #2c5e2a;
+      letter-spacing: 1px;
+    }
+    .stat-value {
+      font-size: 28px;
+      font-weight: 900;
+      color: #1f4f1c;
+      line-height: 1.2;
+    }
+    .tap-zone {
+      background: #3e9f47;
+      border-radius: 50%;
+      width: 260px;
+      height: 260px;
+      margin: 20px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 20px 25px rgba(0,0,0,0.25);
+      transition: transform 0.05s ease;
+      touch-action: manipulation;
+    }
+    .tap-zone:active {
+      transform: scale(0.96);
+    }
+    .watermelon {
+      width: 80%;
+      height: 80%;
+      background: radial-gradient(circle at 30% 30%, #5fbb5a, #267c2e);
+      border-radius: 50%;
+      box-shadow: inset -8px -8px 0 rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 58px;
+      transition: transform 0.1s;
+    }
+    .upgrades {
+      display: flex;
+      gap: 14px;
+      margin-top: 20px;
+    }
+    .upgrade-btn {
+      flex: 1;
+      background: linear-gradient(180deg, #fff7cf 0%, #ffe18b 100%);
+      border: none;
+      border-radius: 32px;
+      padding: 14px 6px;
+      font-weight: bold;
+      color: #5e4510;
+      box-shadow: 0 7px 0 #b97f10;
+      transition: 0.05s linear;
+      touch-action: manipulation;
+    }
+    .upgrade-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 4px 0 #b97f10;
+    }
+    .upgrade-btn.disabled {
+      opacity: 0.5;
+      transform: none;
+      pointer-events: none;
+      filter: grayscale(0.2);
+    }
+    .upgrade-title {
+      font-size: 15px;
+      font-weight: 900;
+    }
+    .upgrade-meta {
+      font-size: 11px;
+      margin-top: 4px;
+    }
+    .upgrade-cost {
+      font-size: 18px;
+      font-weight: 900;
+      margin-top: 6px;
+    }
+    .float-number {
+      position: fixed;
+      pointer-events: none;
+      font-size: 28px;
+      font-weight: 900;
+      color: gold;
+      text-shadow: 0 0 8px darkgreen;
+      animation: floatUp 0.7s ease-out forwards;
+      z-index: 1000;
+    }
+    @keyframes floatUp {
+      0% { opacity: 1; transform: translate(-50%, 0) scale(0.7);}
+      100% { opacity: 0; transform: translate(-50%, -80px) scale(1.2);}
+    }
+    .game-over {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+    }
+    .game-over-card {
+      background: #fff7e8;
+      border-radius: 48px;
+      padding: 28px 24px;
+      text-align: center;
+      max-width: 280px;
+      color: #2b5a27;
+    }
+    .restart-btn {
+      background: #74d66d;
+      border: none;
+      border-radius: 60px;
+      padding: 12px 24px;
+      font-weight: bold;
+      font-size: 18px;
+      margin-top: 20px;
+      color: #1f481c;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+<div class="game-container">
+  <div class="stats">
+    <div class="stat-card"><div class="stat-label">🌱 РОСТ</div><div class="stat-value" id="growthDisplay">0</div></div>
+    <div class="stat-card"><div class="stat-label">💪 ЗА КЛИК</div><div class="stat-value" id="clickPowerDisplay">1</div></div>
+    <div class="stat-card"><div class="stat-label">🚜 АВТО/С</div><div class="stat-value" id="autoPowerDisplay">0</div></div>
+    <div class="stat-card"><div class="stat-label">🎯 ЦЕЛЬ</div><div class="stat-value">12 000</div></div>
+  </div>
+
+  <div class="tap-zone" id="tapButton">
+    <div class="watermelon" id="melonEmoji">🍉</div>
+  </div>
+
+  <div class="upgrades">
+    <button class="upgrade-btn" id="clickUpgrade">
+      <div class="upgrade-title">💪 Сила клика</div>
+      <div class="upgrade-meta" id="clickLevelText">Уровень 1</div>
+      <div class="upgrade-cost" id="clickCostText">50</div>
+    </button>
+    <button class="upgrade-btn" id="autoUpgrade">
+      <div class="upgrade-title">🚜 Авто-ферма</div>
+      <div class="upgrade-meta" id="autoLevelText">Уровень 0</div>
+      <div class="upgrade-cost" id="autoCostText">80</div>
+    </button>
+  </div>
+</div>
+
+<div id="gameOverlay" class="game-over">
+  <div class="game-over-card">
+    <h2>🍉 ГИГАНТСКИЙ АРБУЗ!</h2>
+    <p>Ты вырастил бахчу мечты.</p>
+    <p id="finalScoreMsg">Счёт: 0</p>
+    <button class="restart-btn" id="restartButton">🌱 ИГРАТЬ СНОВА</button>
+  </div>
+</div>
+
+<script>
+  // ----- ИГРОВАЯ ЛОГИКА (без SDK, клики работают 100%) -----
+  let growth = 0;
+  let clickPower = 1;
+  let clickLevel = 1;
+  let autoPower = 0;
+  let autoLevel = 0;
+  let clickUpgradeCost = 50;
+  let autoUpgradeCost = 80;
+  const GOAL = 12000;
+  let running = true;
+  let lastAutoTime = performance.now();
+
+  // DOM элементы
+  const growthDisplay = document.getElementById('growthDisplay');
+  const clickPowerDisplay = document.getElementById('clickPowerDisplay');
+  const autoPowerDisplay = document.getElementById('autoPowerDisplay');
+  const clickLevelText = document.getElementById('clickLevelText');
+  const autoLevelText = document.getElementById('autoLevelText');
+  const clickCostText = document.getElementById('clickCostText');
+  const autoCostText = document.getElementById('autoCostText');
+  const tapButton = document.getElementById('tapButton');
+  const clickUpgradeBtn = document.getElementById('clickUpgrade');
+  const autoUpgradeBtn = document.getElementById('autoUpgrade');
+  const gameOverlay = document.getElementById('gameOverlay');
+  const finalScoreMsg = document.getElementById('finalScoreMsg');
+  const restartBtn = document.getElementById('restartButton');
+  const melonEmoji = document.getElementById('melonEmoji');
+
+  function formatNumber(num) {
+    return Math.floor(num).toLocaleString('ru-RU');
+  }
+
+  function updateStageEmoji() {
+    if (growth < 25) melonEmoji.innerText = '🌱';
+    else if (growth < 120) melonEmoji.innerText = '🌿';
+    else if (growth < 450) melonEmoji.innerText = '🍈';
+    else if (growth < 1500) melonEmoji.innerText = '🍉';
+    else if (growth < 5000) melonEmoji.innerText = '🍉🔥';
+    else if (growth < 9000) melonEmoji.innerText = '🍉⚡';
+    else melonEmoji.innerText = '🌍🍉';
+  }
+
+  function renderUI() {
+    growthDisplay.innerText = formatNumber(growth);
+    clickPowerDisplay.innerText = formatNumber(clickPower);
+    autoPowerDisplay.innerText = formatNumber(autoPower);
+    clickLevelText.innerText = `Уровень ${clickLevel}`;
+    autoLevelText.innerText = `Уровень ${autoLevel}`;
+    clickCostText.innerText = formatNumber(clickUpgradeCost);
+    autoCostText.innerText = formatNumber(autoUpgradeCost);
+
+    if (growth < clickUpgradeCost) clickUpgradeBtn.classList.add('disabled');
+    else clickUpgradeBtn.classList.remove('disabled');
+    if (growth < autoUpgradeCost) autoUpgradeBtn.classList.add('disabled');
+    else autoUpgradeBtn.classList.remove('disabled');
+
+    updateStageEmoji();
+  }
+
+  function createFloating(value, clientX, clientY) {
+    const div = document.createElement('div');
+    div.className = 'float-number';
+    div.textContent = `+${formatNumber(value)}`;
+    div.style.left = clientX + 'px';
+    div.style.top = clientY + 'px';
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 700);
+  }
+
+  function finishGame() {
+    if (!running) return;
+    running = false;
+    finalScoreMsg.innerText = `Счёт: ${formatNumber(growth)}`;
+    gameOverlay.style.display = 'flex';
+    if (navigator.vibrate) navigator.vibrate(200);
+  }
+
+  function addGrowth(amount, event) {
+    if (!running) return;
+    growth += amount;
+    if (event && event.clientX) {
+      createFloating(amount, event.clientX, event.clientY);
+    }
+    renderUI();
+    if (growth >= GOAL) {
+      growth = GOAL;
+      renderUI();
+      finishGame();
+    }
+  }
+
+  // Обработчик клика по арбузу - РАБОТАЕТ
+  tapButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    addGrowth(clickPower, e);
+    if (navigator.vibrate) navigator.vibrate(30);
+    tapButton.style.transform = 'scale(0.96)';
+    setTimeout(() => { tapButton.style.transform = ''; }, 80);
+  });
+
+  // Апгрейд силы клика
+  clickUpgradeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!running) return;
+    if (growth >= clickUpgradeCost) {
+      growth -= clickUpgradeCost;
+      clickLevel++;
+      clickPower += Math.max(1, Math.floor(clickLevel * 0.8));
+      clickUpgradeCost = Math.floor(clickUpgradeCost * 1.7);
+      renderUI();
+      if (navigator.vibrate) navigator.vibrate(50);
+    }
+  });
+
+  // Апгрейд автофермы
+  autoUpgradeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!running) return;
+    if (growth >= autoUpgradeCost) {
+      growth -= autoUpgradeCost;
+      autoLevel++;
+      autoPower += 1 + Math.floor(autoLevel * 0.6);
+      autoUpgradeCost = Math.floor(autoUpgradeCost * 1.8);
+      renderUI();
+      if (navigator.vibrate) navigator.vibrate(50);
+    }
+  });
+
+  // Перезапуск
+  function restartGame() {
+    growth = 0;
+    clickPower = 1;
+    clickLevel = 1;
+    autoPower = 0;
+    autoLevel = 0;
+    clickUpgradeCost = 50;
+    autoUpgradeCost = 80;
+    running = true;
+    gameOverlay.style.display = 'none';
+    renderUI();
+    lastAutoTime = performance.now();
+  }
+  restartBtn.addEventListener('click', restartGame);
+
+  // Авто-ферма
+  function autoFarmLoop(now) {
+    if (running && autoPower > 0) {
+      let dt = Math.min(0.1, (now - lastAutoTime) / 1000);
+      if (dt > 0) {
+        let increment = autoPower * dt;
+        growth += increment;
+        if (growth >= GOAL) {
+          growth = GOAL;
+          renderUI();
+          finishGame();
+        } else {
+          renderUI();
+        }
+      }
+    }
+    lastAutoTime = now;
+    requestAnimationFrame(autoFarmLoop);
+  }
+
+  renderUI();
+  requestAnimationFrame(autoFarmLoop);
+</script>
+</body>
+</html>
