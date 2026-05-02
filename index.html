@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Арбузур: Великий Рост</title>
+  <title>Арбузур: Великий Рост — мега-цель 1 млн</title>
   <style>
     * {
       box-sizing: border-box;
@@ -179,7 +179,7 @@
     <div class="stat-card"><div class="stat-label">🌱 РОСТ</div><div class="stat-value" id="growthDisplay">0</div></div>
     <div class="stat-card"><div class="stat-label">💪 ЗА КЛИК</div><div class="stat-value" id="clickPowerDisplay">1</div></div>
     <div class="stat-card"><div class="stat-label">🚜 АВТО/С</div><div class="stat-value" id="autoPowerDisplay">0</div></div>
-    <div class="stat-card"><div class="stat-label">🎯 ЦЕЛЬ</div><div class="stat-value">12 000</div></div>
+    <div class="stat-card"><div class="stat-label">🎯 ЦЕЛЬ</div><div class="stat-value" id="goalDisplay">1 000 000</div></div>
   </div>
 
   <div class="tap-zone" id="tapButton">
@@ -210,172 +210,315 @@
 </div>
 
 <script>
-  // ----- ИГРОВАЯ ЛОГИКА (без SDK, клики работают 100%) -----
-  let growth = 0;
-  let clickPower = 1;
-  let clickLevel = 1;
-  let autoPower = 0;
-  let autoLevel = 0;
-  let clickUpgradeCost = 50;
-  let autoUpgradeCost = 80;
-  const GOAL = 12000;
-  let running = true;
-  let lastAutoTime = performance.now();
-
-  // DOM элементы
-  const growthDisplay = document.getElementById('growthDisplay');
-  const clickPowerDisplay = document.getElementById('clickPowerDisplay');
-  const autoPowerDisplay = document.getElementById('autoPowerDisplay');
-  const clickLevelText = document.getElementById('clickLevelText');
-  const autoLevelText = document.getElementById('autoLevelText');
-  const clickCostText = document.getElementById('clickCostText');
-  const autoCostText = document.getElementById('autoCostText');
-  const tapButton = document.getElementById('tapButton');
-  const clickUpgradeBtn = document.getElementById('clickUpgrade');
-  const autoUpgradeBtn = document.getElementById('autoUpgrade');
-  const gameOverlay = document.getElementById('gameOverlay');
-  const finalScoreMsg = document.getElementById('finalScoreMsg');
-  const restartBtn = document.getElementById('restartButton');
-  const melonEmoji = document.getElementById('melonEmoji');
-
-  function formatNumber(num) {
-    return Math.floor(num).toLocaleString('ru-RU');
-  }
-
-  function updateStageEmoji() {
-    if (growth < 25) melonEmoji.innerText = '🌱';
-    else if (growth < 120) melonEmoji.innerText = '🌿';
-    else if (growth < 450) melonEmoji.innerText = '🍈';
-    else if (growth < 1500) melonEmoji.innerText = '🍉';
-    else if (growth < 5000) melonEmoji.innerText = '🍉🔥';
-    else if (growth < 9000) melonEmoji.innerText = '🍉⚡';
-    else melonEmoji.innerText = '🌍🍉';
-  }
-
-  function renderUI() {
-    growthDisplay.innerText = formatNumber(growth);
-    clickPowerDisplay.innerText = formatNumber(clickPower);
-    autoPowerDisplay.innerText = formatNumber(autoPower);
-    clickLevelText.innerText = `Уровень ${clickLevel}`;
-    autoLevelText.innerText = `Уровень ${autoLevel}`;
-    clickCostText.innerText = formatNumber(clickUpgradeCost);
-    autoCostText.innerText = formatNumber(autoUpgradeCost);
-
-    if (growth < clickUpgradeCost) clickUpgradeBtn.classList.add('disabled');
-    else clickUpgradeBtn.classList.remove('disabled');
-    if (growth < autoUpgradeCost) autoUpgradeBtn.classList.add('disabled');
-    else autoUpgradeBtn.classList.remove('disabled');
-
-    updateStageEmoji();
-  }
-
-  function createFloating(value, clientX, clientY) {
-    const div = document.createElement('div');
-    div.className = 'float-number';
-    div.textContent = `+${formatNumber(value)}`;
-    div.style.left = clientX + 'px';
-    div.style.top = clientY + 'px';
-    document.body.appendChild(div);
-    setTimeout(() => div.remove(), 700);
-  }
-
-  function finishGame() {
-    if (!running) return;
-    running = false;
-    finalScoreMsg.innerText = `Счёт: ${formatNumber(growth)}`;
-    gameOverlay.style.display = 'flex';
-    if (navigator.vibrate) navigator.vibrate(200);
-  }
-
-  function addGrowth(amount, event) {
-    if (!running) return;
-    growth += amount;
-    if (event && event.clientX) {
-      createFloating(amount, event.clientX, event.clientY);
+  (function() {
+    // ---------- КЛЮЧ ДЛЯ ХРАНЕНИЯ В localStorage ----------
+    const SAVE_KEY = "arbuzur_save_v1";
+    
+    // ---------- НОВАЯ ЦЕЛЬ: 1 000 000 ----------
+    const GOAL = 1000000;
+    
+    // Игровые переменные
+    let growth = 0;
+    let clickPower = 1;
+    let clickLevel = 1;
+    let autoPower = 0;
+    let autoLevel = 0;
+    let clickUpgradeCost = 50;
+    let autoUpgradeCost = 80;
+    let running = true;
+    let lastAutoTime = performance.now();
+    
+    // троттлинг автосохранения
+    let lastSaveTimestamp = 0;
+    let pendingSave = false;
+    
+    // DOM элементы
+    const growthDisplay = document.getElementById('growthDisplay');
+    const clickPowerDisplay = document.getElementById('clickPowerDisplay');
+    const autoPowerDisplay = document.getElementById('autoPowerDisplay');
+    const clickLevelText = document.getElementById('clickLevelText');
+    const autoLevelText = document.getElementById('autoLevelText');
+    const clickCostText = document.getElementById('clickCostText');
+    const autoCostText = document.getElementById('autoCostText');
+    const goalDisplaySpan = document.getElementById('goalDisplay');
+    const tapButton = document.getElementById('tapButton');
+    const clickUpgradeBtn = document.getElementById('clickUpgrade');
+    const autoUpgradeBtn = document.getElementById('autoUpgrade');
+    const gameOverlay = document.getElementById('gameOverlay');
+    const finalScoreMsg = document.getElementById('finalScoreMsg');
+    const restartBtn = document.getElementById('restartButton');
+    const melonEmoji = document.getElementById('melonEmoji');
+    
+    // отображаем цель сразу
+    if (goalDisplaySpan) goalDisplaySpan.innerText = "1 000 000";
+    
+    function formatNumber(num) {
+      return Math.floor(num).toLocaleString('ru-RU');
     }
-    renderUI();
-    if (growth >= GOAL) {
-      growth = GOAL;
-      renderUI();
-      finishGame();
+    
+    function updateStageEmoji() {
+      // адаптируем стадии под огромный миллион, чтобы было веселее
+      if (growth < 50) melonEmoji.innerText = '🌱';
+      else if (growth < 500) melonEmoji.innerText = '🌿';
+      else if (growth < 5000) melonEmoji.innerText = '🍈';
+      else if (growth < 25000) melonEmoji.innerText = '🍉';
+      else if (growth < 100000) melonEmoji.innerText = '🍉🔥';
+      else if (growth < 500000) melonEmoji.innerText = '🍉⚡';
+      else melonEmoji.innerText = '🌍🍉';
     }
-  }
-
-  // Обработчик клика по арбузу - РАБОТАЕТ
-  tapButton.addEventListener('click', (e) => {
-    e.preventDefault();
-    addGrowth(clickPower, e);
-    if (navigator.vibrate) navigator.vibrate(30);
-    tapButton.style.transform = 'scale(0.96)';
-    setTimeout(() => { tapButton.style.transform = ''; }, 80);
-  });
-
-  // Апгрейд силы клика
-  clickUpgradeBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (!running) return;
-    if (growth >= clickUpgradeCost) {
-      growth -= clickUpgradeCost;
-      clickLevel++;
-      clickPower += Math.max(1, Math.floor(clickLevel * 0.8));
-      clickUpgradeCost = Math.floor(clickUpgradeCost * 1.7);
-      renderUI();
-      if (navigator.vibrate) navigator.vibrate(50);
+    
+    function renderUI() {
+      growthDisplay.innerText = formatNumber(growth);
+      clickPowerDisplay.innerText = formatNumber(clickPower);
+      autoPowerDisplay.innerText = formatNumber(autoPower);
+      clickLevelText.innerText = `Уровень ${clickLevel}`;
+      autoLevelText.innerText = `Уровень ${autoLevel}`;
+      clickCostText.innerText = formatNumber(clickUpgradeCost);
+      autoCostText.innerText = formatNumber(autoUpgradeCost);
+      
+      if (growth < clickUpgradeCost) clickUpgradeBtn.classList.add('disabled');
+      else clickUpgradeBtn.classList.remove('disabled');
+      if (growth < autoUpgradeCost) autoUpgradeBtn.classList.add('disabled');
+      else autoUpgradeBtn.classList.remove('disabled');
+      
+      updateStageEmoji();
     }
-  });
-
-  // Апгрейд автофермы
-  autoUpgradeBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (!running) return;
-    if (growth >= autoUpgradeCost) {
-      growth -= autoUpgradeCost;
-      autoLevel++;
-      autoPower += 1 + Math.floor(autoLevel * 0.6);
-      autoUpgradeCost = Math.floor(autoUpgradeCost * 1.8);
-      renderUI();
-      if (navigator.vibrate) navigator.vibrate(50);
+    
+    function createFloating(value, clientX, clientY) {
+      const div = document.createElement('div');
+      div.className = 'float-number';
+      div.textContent = `+${formatNumber(value)}`;
+      div.style.left = clientX + 'px';
+      div.style.top = clientY + 'px';
+      document.body.appendChild(div);
+      setTimeout(() => div.remove(), 700);
     }
-  });
-
-  // Перезапуск
-  function restartGame() {
-    growth = 0;
-    clickPower = 1;
-    clickLevel = 1;
-    autoPower = 0;
-    autoLevel = 0;
-    clickUpgradeCost = 50;
-    autoUpgradeCost = 80;
-    running = true;
-    gameOverlay.style.display = 'none';
-    renderUI();
-    lastAutoTime = performance.now();
-  }
-  restartBtn.addEventListener('click', restartGame);
-
-  // Авто-ферма
-  function autoFarmLoop(now) {
-    if (running && autoPower > 0) {
-      let dt = Math.min(0.1, (now - lastAutoTime) / 1000);
-      if (dt > 0) {
-        let increment = autoPower * dt;
-        growth += increment;
-        if (growth >= GOAL) {
-          growth = GOAL;
+    
+    // Сохранение игры
+    function saveGameToStorage(force = false) {
+      const now = performance.now();
+      if (!force && (now - lastSaveTimestamp < 600)) {
+        if (!pendingSave) {
+          pendingSave = true;
+          setTimeout(() => {
+            if (pendingSave) {
+              pendingSave = false;
+              saveGameToStorage(true);
+            }
+          }, 500);
+        }
+        return;
+      }
+      pendingSave = false;
+      lastSaveTimestamp = now;
+      
+      const saveData = {
+        growth: growth,
+        clickPower: clickPower,
+        clickLevel: clickLevel,
+        autoPower: autoPower,
+        autoLevel: autoLevel,
+        clickUpgradeCost: clickUpgradeCost,
+        autoUpgradeCost: autoUpgradeCost,
+        gameOver: !running,
+        version: 1
+      };
+      try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
+      } catch(e) { /* тихо */ }
+    }
+    
+    // Загрузка сохранения
+    function loadGameFromStorage() {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return false;
+      try {
+        const data = JSON.parse(raw);
+        if (data.version === 1) {
+          growth = typeof data.growth === 'number' ? Math.min(data.growth, GOAL) : 0;
+          clickPower = typeof data.clickPower === 'number' ? data.clickPower : 1;
+          clickLevel = typeof data.clickLevel === 'number' ? data.clickLevel : 1;
+          autoPower = typeof data.autoPower === 'number' ? data.autoPower : 0;
+          autoLevel = typeof data.autoLevel === 'number' ? data.autoLevel : 0;
+          clickUpgradeCost = typeof data.clickUpgradeCost === 'number' ? data.clickUpgradeCost : 50;
+          autoUpgradeCost = typeof data.autoUpgradeCost === 'number' ? data.autoUpgradeCost : 80;
+          
+          const wasGameOver = data.gameOver === true;
+          if (growth >= GOAL) {
+            growth = GOAL;
+            running = false;
+            showGameOverScreen();
+          } else if (wasGameOver && growth < GOAL) {
+            running = true;
+          } else {
+            running = !wasGameOver;
+          }
           renderUI();
-          finishGame();
-        } else {
-          renderUI();
+          return true;
+        }
+      } catch(e) { /* игнорируем */ }
+      return false;
+    }
+    
+    function showGameOverScreen() {
+      if (!running) return;
+      running = false;
+      finalScoreMsg.innerText = `Счёт: ${formatNumber(growth)}`;
+      gameOverlay.style.display = 'flex';
+      if (navigator.vibrate) navigator.vibrate(200);
+      saveGameToStorage(true);
+    }
+    
+    function finishGame() {
+      if (!running) return;
+      running = false;
+      finalScoreMsg.innerText = `Счёт: ${formatNumber(growth)}`;
+      gameOverlay.style.display = 'flex';
+      if (navigator.vibrate) navigator.vibrate(200);
+      saveGameToStorage(true);
+    }
+    
+    function addGrowth(amount, event) {
+      if (!running) return;
+      if (amount <= 0) return;
+      growth += amount;
+      if (growth >= GOAL) {
+        growth = GOAL;
+        renderUI();
+        finishGame();
+      } else {
+        renderUI();
+      }
+      if (event && event.clientX) {
+        createFloating(amount, event.clientX, event.clientY);
+      }
+      saveGameToStorage(true);
+    }
+    
+    // Автоферма
+    function autoFarmLoop(now) {
+      if (running && autoPower > 0) {
+        let dt = Math.min(0.1, (now - lastAutoTime) / 1000);
+        if (dt > 0) {
+          let increment = autoPower * dt;
+          if (increment > 0) {
+            growth += increment;
+            if (growth >= GOAL) {
+              growth = GOAL;
+              renderUI();
+              finishGame();
+              saveGameToStorage(true);
+            } else {
+              renderUI();
+              saveGameToStorage(false);
+            }
+          }
         }
       }
+      lastAutoTime = now;
+      requestAnimationFrame(autoFarmLoop);
     }
-    lastAutoTime = now;
-    requestAnimationFrame(autoFarmLoop);
-  }
-
-  renderUI();
-  requestAnimationFrame(autoFarmLoop);
+    
+    function upgradeClick() {
+      if (!running) return;
+      if (growth >= clickUpgradeCost) {
+        growth -= clickUpgradeCost;
+        clickLevel++;
+        clickPower += Math.max(1, Math.floor(clickLevel * 0.8));
+        clickUpgradeCost = Math.floor(clickUpgradeCost * 1.7);
+        renderUI();
+        if (navigator.vibrate) navigator.vibrate(50);
+        saveGameToStorage(true);
+      }
+    }
+    
+    function upgradeAuto() {
+      if (!running) return;
+      if (growth >= autoUpgradeCost) {
+        growth -= autoUpgradeCost;
+        autoLevel++;
+        autoPower += 1 + Math.floor(autoLevel * 0.6);
+        autoUpgradeCost = Math.floor(autoUpgradeCost * 1.8);
+        renderUI();
+        if (navigator.vibrate) navigator.vibrate(50);
+        saveGameToStorage(true);
+      }
+    }
+    
+    function restartGame() {
+      growth = 0;
+      clickPower = 1;
+      clickLevel = 1;
+      autoPower = 0;
+      autoLevel = 0;
+      clickUpgradeCost = 50;
+      autoUpgradeCost = 80;
+      running = true;
+      gameOverlay.style.display = 'none';
+      renderUI();
+      lastAutoTime = performance.now();
+      saveGameToStorage(true);
+      if (navigator.vibrate) navigator.vibrate(50);
+    }
+    
+    function handleTap(e) {
+      e.preventDefault();
+      if (!running) return;
+      addGrowth(clickPower, e);
+      if (navigator.vibrate) navigator.vibrate(30);
+      tapButton.style.transform = 'scale(0.96)';
+      setTimeout(() => { tapButton.style.transform = ''; }, 80);
+    }
+    
+    function bindEvents() {
+      tapButton.addEventListener('click', handleTap);
+      clickUpgradeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        upgradeClick();
+      });
+      autoUpgradeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        upgradeAuto();
+      });
+      restartBtn.addEventListener('click', () => {
+        restartGame();
+      });
+    }
+    
+    function ensureGameOverState() {
+      if (growth >= GOAL) {
+        growth = GOAL;
+        running = false;
+        renderUI();
+        showGameOverScreen();
+      } else {
+        if (!running && growth < GOAL) {
+          running = true;
+        }
+        renderUI();
+      }
+    }
+    
+    function init() {
+      const loaded = loadGameFromStorage();
+      if (!loaded) {
+        running = true;
+        renderUI();
+      } else {
+        ensureGameOverState();
+      }
+      bindEvents();
+      lastAutoTime = performance.now();
+      requestAnimationFrame(autoFarmLoop);
+      window.addEventListener('beforeunload', () => {
+        if (running || growth >= GOAL) {
+          saveGameToStorage(true);
+        }
+      });
+    }
+    
+    init();
+  })();
 </script>
 </body>
 </html>
